@@ -1,0 +1,11 @@
+package com.todo.management.error;
+
+public enum ErrorCode {
+  TODO_NOT_FOUND,
+  PAST_DUE_IMMUTABLE,
+  INVALID_DUE_DATE,
+  VALIDATION_ERROR,
+  MALFORMED_JSON,
+  CONCURRENT_MODIFICATION,
+  INTERNAL_ERROR
+}
