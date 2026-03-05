@@ -11,6 +11,8 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -72,6 +74,18 @@ public class GlobalExceptionHandler {
             new ApiResponse.ApiError(apiEx.code().name(), apiEx.getMessage(), Map.of()),
             ApiResponse.ApiMeta.of(req, Instant.now())
         ));
+  }
+
+  @ExceptionHandler({NoHandlerFoundException.class, NoResourceFoundException.class})
+  public ResponseEntity<ApiResponse<Void>> handleNotFound(Exception ex, HttpServletRequest req) {
+    log.warn("request.failed status=404 code={} path={} msg=Endpoint not found",
+            ErrorCode.NOT_FOUND, req.getRequestURI());
+
+    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(ApiResponse.fail(
+                    new ApiResponse.ApiError(ErrorCode.NOT_FOUND.name(), "Endpoint not found", Map.of()),
+                    ApiResponse.ApiMeta.of(req, Instant.now())
+            ));
   }
 
   @ExceptionHandler(Exception.class)
