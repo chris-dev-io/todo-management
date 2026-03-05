@@ -3,6 +3,8 @@ package com.todo.management.service;
 import com.todo.management.domain.TodoItem;
 import com.todo.management.domain.TodoStatus;
 import com.todo.management.error.Errors;
+import com.todo.management.error.ApiException;
+import com.todo.management.error.ErrorCode;
 import com.todo.management.repository.TodoRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,11 +31,11 @@ public class TodoService {
 
     String desc = description == null ? null : description.trim();
     if (desc == null || desc.isBlank()) {
-      throw com.todo.management.error.ApiException.badRequest(com.todo.management.error.ErrorCode.VALIDATION_ERROR, "description must not be blank");
+      throw ApiException.badRequest(ErrorCode.VALIDATION_ERROR, "description must not be blank");
     }
 
     if (dueDate == null) {
-      throw com.todo.management.error.ApiException.badRequest(com.todo.management.error.ErrorCode.VALIDATION_ERROR, "dueDate must not be null");
+      throw ApiException.badRequest(ErrorCode.VALIDATION_ERROR, "dueDate must not be null");
     }
 
     if (!dueDate.isAfter(now)) {
@@ -46,11 +48,17 @@ public class TodoService {
     return saved;
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public TodoItem get(Long id) {
+    Instant now = Instant.now(clock);
+
     TodoItem item = repo.findById(id).orElseThrow(() -> Errors.todoNotFound(id));
 
-    applyPastDueInMemory(item);
+    if (item.isNotDone() && now.isAfter(item.getDueDate())) {
+      item.markPastDue();
+      log.info("todo.autoPastDue.singleUpdated id={} now={}", id, now);
+    }
+
     return item;
   }
 
@@ -77,7 +85,7 @@ public class TodoService {
 
     String desc = newDescription == null ? null : newDescription.trim();
     if (desc == null || desc.isBlank()) {
-      throw com.todo.management.error.ApiException.badRequest(com.todo.management.error.ErrorCode.VALIDATION_ERROR, "description must not be blank");
+      throw ApiException.badRequest(ErrorCode.VALIDATION_ERROR, "description must not be blank");
     }
 
     item.changeDescription(desc);
@@ -107,22 +115,16 @@ public class TodoService {
     return item;
   }
 
-  private void applyPastDueInMemory(TodoItem item) {
-    if (item.getStatus() == TodoStatus.NOT_DONE && Instant.now(clock).isAfter(item.getDueDate())) {
-      item.markPastDue();
-    }
-  }
-
   private void forbidIfOverdueOrPastDue(TodoItem item) {
     Instant now = Instant.now(clock);
 
-    if (item.getStatus() == TodoStatus.NOT_DONE && now.isAfter(item.getDueDate())) {
+    if (item.isNotDone() && now.isAfter(item.getDueDate())) {
       item.markPastDue();
       log.warn("todo.writeRejected reason=past_due id={} dueDate={} now={}", item.getId(), item.getDueDate(), now);
       throw Errors.pastDueImmutable(item.getId());
     }
 
-    if (item.getStatus() == TodoStatus.PAST_DUE) {
+    if (item.isPastDue()) {
       log.warn("todo.writeRejected reason=past_due id={}", item.getId());
       throw Errors.pastDueImmutable(item.getId());
     }
